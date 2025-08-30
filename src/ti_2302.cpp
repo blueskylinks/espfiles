@@ -15,8 +15,8 @@ const int hpin = D1;
 const int sled = LED_BUILTIN;
 int value = 11;
 int state=0;
-int vstate1=2;
-int vstate2=2;
+int vstate1=1;
+int vstate2=1;
 int volt_state=1;
 int temp_count1=0;
 int temp_count2=0;
@@ -35,7 +35,7 @@ void setup()
   pinMode(lsen, INPUT_PULLUP);
   pinMode(hpin, OUTPUT);
   pinMode(sled, OUTPUT);
-  digitalWrite(hpin,LOW);
+  digitalWrite(hpin,HIGH);
   digitalWrite(sled,HIGH);
   while (!Serial);
   Serial.println("LoRa Sender");
@@ -69,62 +69,8 @@ void send_data(int rn){
  
 void loop() 
 {
-
   Serial.print("Sending packet: ");
   Serial.println(counter);
-  rnum=random(2,8);
-  rnum=random(1,4);
-
-  if(digitalRead(hsen)==0 && digitalRead(hpin)==1){
-    temp_count1=temp_count1+1;
-    Serial.println("temp count");
-    Serial.println(temp_count1);
-    if(temp_count1>=3){
-      state=2;
-      vstate1=0;
-      vstate2=0;
-    }
-    if(temp_count1>=10){
-      Serial.println("LOW....");
-      digitalWrite(hpin, LOW);
-      temp_count1=0;
-    }
-  }else{
-    temp_count1=0;
-  }
-
-  if(digitalRead(lsen)==0 && digitalRead(hpin)==0){
-    temp_count2=temp_count2+1;
-    Serial.println("temp count");
-    Serial.println(temp_count2);
-    if(temp_count2>=3){
-      Serial.println("HIGH...");
-      digitalWrite(hpin, HIGH);
-      state=1;
-      vstate1=1;
-      vstate2=1;
-      temp_count2=0;
-    }
-  }else{
-    temp_count2=0;
-  }
-
-  //=======================
-
-  if(digitalRead(hpin)==1 && digitalRead(lsen)!=0){
-    temp_count3=temp_count3+1;
-    if(temp_count3>=3){
-      state=2;
-      vstate1=0;
-      vstate2=0;
-    }
-    if(temp_count3>=10){
-      digitalWrite(hpin, LOW);
-      temp_count3=0;
-    }
-  }else{
-    temp_count3=0;
-  }
 
   counter++;
   if(counter>=200){
