@@ -1,32 +1,31 @@
 #include <EEPROM.h>
 #include <Arduino.h>
 #include <TM1637Display.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <time.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 
-/*
-const uint8_t SEG_DONE[] = {
-  SEG_B | SEG_C | SEG_D | SEG_E | SEG_G,           // d
-  SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F,   // O
-  SEG_C | SEG_E | SEG_G,                           // n
-  SEG_A | SEG_D | SEG_E | SEG_F | SEG_G            // E
-  };
-*/
+//const char* ssid = "Airtel_9764005401";
+//const char* password = "air46403";
+
+const char* ssid = "Galaxy M42";
+const char* password = "Chai1111";
 
 
 // Display Module connection pins (Digital Pins)
-
 #define CLK D3
 #define DIO D4
 
 int addr1 = 0;
-int addr2 = 1;
 int value1 = 1;
-int value2 = 2;
 byte memval1;
-byte memval2;
 
 const int ot_sensor = D1;
 const int ut_sensor = D2;
-const int buzzer = D8;
+const int outpin = D8;
 const int ot_status = D6;
 const int ut_status = D5;
 const int auto_status = D7;
@@ -47,6 +46,13 @@ int motor_stoptime=0;
 int tank_size, len;
 int count=0;
 int sound=0;
+int wifi_timout=20;
+unsigned long timestamp;
+
+// NTP client setup
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 19800, 60000); 
+// 19800 = offset in seconds (5h 30m), 60000 = update every 60s
 
 const uint8_t seg_empty[] = {
   SEG_A | SEG_D | SEG_E | SEG_F | SEG_G,           
@@ -63,22 +69,45 @@ const uint8_t seg_full[] = {
   };
 
 TM1637Display display(CLK, DIO);
-  uint8_t data[] = { 0xff, 0xff, 0xff, 0xff };
-  uint8_t blank[] = { 0x00, 0x00, 0x00, 0x00 };
-  uint8_t data_full[] = { 0x15, 0x15, 0x00, 0x00 };
-  uint8_t data_empty[] = { 0x14, 0x00, 0x00, 0x00 };
+uint8_t data[] = { 0xff, 0xff, 0xff, 0xff };
+uint8_t blank[] = { 0x00, 0x00, 0x00, 0x00 };
+uint8_t data_full[] = { 0x15, 0x15, 0x00, 0x00 };
+uint8_t data_empty[] = { 0x14, 0x00, 0x00, 0x00 };
+
+
+void checkWiFiConnection() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi disconnected. Reconnecting...");
+    WiFi.begin(ssid, password);
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < wifi_timout) {
+      delay(500);
+      Serial.print(".");
+      attempts++;
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\n Reconnected to WiFi.");
+      timeClient.begin();
+    } else {
+      Serial.println("\n Reconnection failed.");
+    }
+  }
+}
 
 void setup() {
   Serial.begin(115200);
   EEPROM.begin(512);
+  WiFi.mode(WIFI_STA);
+  checkWiFiConnection();
+
   pinMode(input1, INPUT_PULLUP);  
-  pinMode(buzzer, OUTPUT);
+  pinMode(outpin, OUTPUT);
   pinMode(ot_status, OUTPUT);
   pinMode(ut_status, OUTPUT);
   pinMode(ot_sensor, INPUT_PULLUP);
   pinMode(ut_sensor, INPUT_PULLUP);
   pinMode(auto_status, OUTPUT);
-  digitalWrite(buzzer, LOW);
+  digitalWrite(outpin, LOW);
   motor_status=1;
   digitalWrite(auto_status, HIGH);
   
@@ -143,6 +172,11 @@ void setup() {
 }
 
 void loop() {
+  timeClient.update();
+  Serial.print("IST Time: ");
+  //Serial.println(timeClient.getFormattedTime()); // HH:MM:SS format
+  timestamp = timeClient.getEpochTime();
+  Serial.println(timestamp);
   Serial.println("=========================================");
   Serial.print("Motor Status:");
   Serial.println(motor_status);
@@ -152,22 +186,22 @@ void loop() {
   ut_sensorstatus=digitalRead(ut_sensor);
   Serial.print("Motor Time:");
   Serial.println(motor_time); 
-  Serial.print("HighWater Tank Status:");
+  Serial.print("HighWater Status:");
   Serial.println(ot_sensorstatus);
-  Serial.print("LowWater Status:");
+  Serial.print("LowWater  Status:");
   Serial.println(ut_sensorstatus);
 
   if(digitalRead(input1)==0){
     Serial.println("Button Clicked...!");
     if(motor_status_manual==0){
-      digitalWrite(buzzer,HIGH);
-      motor_status_manual=1;
-      motor_status=1;
-      motor_time=motor_duration*60;
-      value_count=15;
+        digitalWrite(outpin,HIGH);
+        motor_status_manual=1;
+        motor_status=1;
+        motor_time=motor_duration*60;
+        value_count=15;
     }else{
-      if(motor_status_manual==1){
-        digitalWrite(buzzer,LOW);
+    if(motor_status_manual==1){
+        digitalWrite(outpin,LOW);
         digitalWrite(auto_status, LOW);
         Serial.println("Motor is now stopped..!");
         motor_status_manual=0;
@@ -190,24 +224,24 @@ void loop() {
     display.setSegments(seg_empty);
     digitalWrite(ut_status,HIGH);
     if(ut_sensorcount>=20){
-      if(digitalRead(buzzer)!=1){
+      if(digitalRead(outpin)!=1){
          Serial.println("Water tank is still empty, turning on the Motor");
          motor_time=(motor_duration)*60;
-         digitalWrite(buzzer, HIGH);
+         digitalWrite(outpin, HIGH);
          motor_status=1;
       }
       ut_sensorcount=0;
     }
-   ut_sensorcount=ut_sensorcount+1;
-   delay(500);
-  }else{
+    ut_sensorcount=ut_sensorcount+1;
+    delay(500);
+    }else{
     ut_sensorcount=0;
     delay(500);
     display.showNumberDec(0,false);
     digitalWrite(ut_status,LOW);
   }
-
-  if(digitalRead(buzzer)==1){
+  
+  if(digitalRead(outpin)==1){
    motor_time=motor_time-1;
    Serial.println("Motor Running..!");
    display.showNumberDec(1, false, 1, 0);
@@ -218,7 +252,7 @@ void loop() {
     Serial.println("Tank Full or Timed Out..!");
     ot_sensorcount=ot_sensorcount+1;
       if(ot_sensorcount>=5){
-        digitalWrite(buzzer, LOW);
+        digitalWrite(outpin, LOW);
         digitalWrite(auto_status, LOW);
         motor_status=0;
         ot_sensorcount=0;
@@ -233,10 +267,4 @@ void loop() {
   }
   delay(500);
   count=count+1;
-  //if(count>=90){
-  //  Serial.println("Sleep Start....!");
-  //  ESP.deepSleep(30e6);
-  //}
-  
-  
  }
