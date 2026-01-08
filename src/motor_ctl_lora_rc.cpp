@@ -22,7 +22,7 @@ byte memval2;
 const int ot_sensor = D1;
 const int ut_sensor = D1;
 const int buzzer = D2;
-const int input1 = D9;
+const int input1 = D5;
 int ot_sensorstatus=1;
 int ut_sensorstatus=1;
 int error_sensorstatus=1;
@@ -160,10 +160,10 @@ void loop() {
       Serial.println(LoRaData); 
       String deviceid=LoRaData.substring(0,4);
       String devicestatus=LoRaData.substring(8,10);
-      display.setSegments(seg_full);
       Serial.println(deviceid);
       Serial.println(devicestatus);
-      if(deviceid.equals("1011")){
+      if(deviceid.equals("2014")){
+        display.setSegments(seg_full);
         lora_pac_count++;
         Serial.print("Packets:");
         Serial.println(lora_pac_count);

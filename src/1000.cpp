@@ -12,7 +12,7 @@ const int lsen = D5;
 const int hpin = D1;
 const int sled = LED_BUILTIN;
 const int input1 = D9;
-const int potPin = A0; // Potentiometer pin
+const int potPin = A0; 
 
 int deviceNum = 1;
 String deviceid = "01";
@@ -73,7 +73,14 @@ void loop() {
   if (id > 8) id = 8;
   deviceNum = id;
   deviceid = (deviceNum < 10) ? "0" + String(deviceNum) : String(deviceNum);
-
+ for (int i = 0; i < deviceNum; i++) {
+  digitalWrite(sled, LOW);
+  delay(300);
+  digitalWrite(sled, HIGH);
+  delay(300);
+  digitalWrite(sled, LOW);
+  delay(3000);
+  }
   Serial.print("Analog Value: ");
   Serial.print(analogValue);
   Serial.print(" => Device ID: ");

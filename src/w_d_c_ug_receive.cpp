@@ -48,38 +48,36 @@ const uint8_t seg_empty[] = {
   0x00                                        
 };
 
-
 const uint8_t seg_full[] = {
-  SEG_A | SEG_E | SEG_F | SEG_G,                 // F
-  SEG_B | SEG_C | SEG_D | SEG_E | SEG_F,         // U
-  SEG_D | SEG_E | SEG_F,                         // L
-  SEG_D | SEG_E | SEG_F                          // L
+  SEG_A | SEG_E | SEG_F | SEG_G,                 
+  SEG_B | SEG_C | SEG_D | SEG_E | SEG_F,         
+  SEG_D | SEG_E | SEG_F,                         
+  SEG_D | SEG_E | SEG_F                          
 };
 
-  const uint8_t seg_ugempty[] = {
+const uint8_t seg_ugempty[] = {
   0x00,                                              
   SEG_B | SEG_C | SEG_D | SEG_E | SEG_F,             
   SEG_A | SEG_D | SEG_E | SEG_F | SEG_G,             
   0x00
 };
 
-
-
-
 TM1637Display display(CLK, DIO);
-  uint8_t data[] = { 0xff, 0xff, 0xff, 0xff };
-  uint8_t blank[] = { 0x00, 0x00, 0x00, 0x00 };
-  uint8_t data_full[]  = { 0x71, 0x3E, 0x38, 0x38 }; 
-  uint8_t data_empty[] = { 0x79, 0x76, 0x73, 0x78 };
+uint8_t data[] = { 0xff, 0xff, 0xff, 0xff };
+uint8_t blank[] = { 0x00, 0x00, 0x00, 0x00 };
+uint8_t data_full[]  = { 0x71, 0x3E, 0x38, 0x38 }; 
+uint8_t data_empty[] = { 0x79, 0x76, 0x73, 0x78 };
+
+unsigned long lastPacketTime = 0;
+const unsigned long defaultTimeout = 15000; 
+
 
 void setup() {
-  Serial.begin(115200); // Starts the serial communication
+  Serial.begin(115200); 
   EEPROM.begin(512);
   pinMode(input1, INPUT_PULLUP);  
   pinMode(buzzer, OUTPUT);
-  //pinMode(ot_sensor, INPUT_PULLUP);
-  //pinMode(ut_sensor, INPUT_PULLUP);
-    pinMode(ug_sensor, INPUT_PULLUP);
+  pinMode(ug_sensor, INPUT_PULLUP);
   digitalWrite(buzzer, LOW);
   motor_status=0;  
   delay(1000);
@@ -109,11 +107,11 @@ void setup() {
 
       EEPROM.write(addr1, motor_duration);
       if (EEPROM.commit()) {
-      Serial.println("EEPROM successfully committed");
-      display.showNumberDec(5, false, 1, 0);
-      display.showNumberDec(motor_duration,false);
+        Serial.println("EEPROM successfully committed");
+        display.showNumberDec(5, false, 1, 0);
+        display.showNumberDec(motor_duration,false);
       } else {
-      Serial.println("ERROR! EEPROM commit failed");
+        Serial.println("ERROR! EEPROM commit failed");
       }      
     }
   }  
@@ -121,15 +119,15 @@ void setup() {
   if(motor_duration<1 || motor_duration>180){
     motor_duration=30;
   }
-   
+
   motor_time=motor_duration*60;
   empty_start=0;
 
   const uint8_t seg_duration[] = {
-  SEG_A | SEG_B | SEG_E | SEG_F | SEG_G,           
-  SEG_D,   
-  SEG_D,                           
-  SEG_D           
+    SEG_A | SEG_B | SEG_E | SEG_F | SEG_G,           
+    SEG_D,   
+    SEG_D,                           
+    SEG_D           
   };
 
   for(int i=0;i<8;i++){
@@ -140,15 +138,13 @@ void setup() {
   }
   display.showNumberDec(0,false);
 
-  LoRa.setPins(ss, rst, dio0);    //setup LoRa transceiver module
+  LoRa.setPins(ss, rst, dio0);
   LoRa.setSyncWord(0xA2);
   LoRa.setSpreadingFactor(12);
   LoRa.setSignalBandwidth(62.5E3);
-  //LoRa.begin(433E6)
-  int temp_count1=30;
 
-  while (!LoRa.begin(433920000))     //433E6 - Asia, 866E6 - Europe, 915E6 - North America
-  {
+  int temp_count1=30;
+  while (!LoRa.begin(433920000)) {
     Serial.println(".");
     temp_count1++;
     if(temp_count1>=30){
@@ -156,170 +152,168 @@ void setup() {
     }
     delay(500);
   }
-
 }
 
 void loop() {
 
   ug_sensorstatus=digitalRead(ug_sensor);
-  
   Serial.print("ug_sensorstatus:");
   Serial.println(ug_sensorstatus);
-  if (ug_sensorstatus==1)
-  {
-  
-  int packetSize = LoRa.parsePacket();    // try to parse packet
-  if (packetSize) 
-  {
-    Serial.print("Packet Size:");
-    Serial.println(packetSize);
-    Serial.print("Received packet '");
-    while (LoRa.available())              // read packet
-    {
-      String LoRaData = LoRa.readString();
-      Serial.println(LoRaData); 
-      String deviceid=LoRaData.substring(0,4);
-      String devicestatus=LoRaData.substring(6,8);
-      Serial.println(deviceid);
-      Serial.println(devicestatus);
-      if(deviceid.equals("2013") && devicestatus.equals("00")){
-        display.clear();
-        display.setSegments(seg_full);
-        delay(300);
-        tcount1++;
-        Serial.print("Packets:");
-        Serial.println(tcount1);
-        if(tcount1>=3 && digitalRead(buzzer)==1){
-          Serial.println("Tank Full.........");
+
+  if (ug_sensorstatus==1) {
+    int packetSize = LoRa.parsePacket();
+    if (packetSize) {
+      Serial.print("Packet Size:");
+      Serial.println(packetSize);
+      Serial.print("Received packet '");
+
+      while (LoRa.available()) {
+        String LoRaData = LoRa.readString();
+        Serial.println(LoRaData); 
+        String deviceid=LoRaData.substring(0,4);
+        String devicestatus=LoRaData.substring(6,8);
+        Serial.println(deviceid);
+        Serial.println(devicestatus);
+
+        if(deviceid.equals("2015") && devicestatus.equals("00")){
+          display.clear();
+          display.setSegments(seg_full);
+          delay(300);
+          tcount1++;
+          Serial.print("Packets:");
+          Serial.println(tcount1);
+          if(tcount1>=3 && digitalRead(buzzer)==1){
+            Serial.println("Tank Full.........");
+            digitalWrite(buzzer, LOW);
+            motor_status=0;
+            display.showNumberDec(0,false); 
+            motor_time=(motor_duration)*60;
+            tcount1=0;
+            sensor_status=0;
+          }
+        } else {
+          tcount1=0;
+        }
+
+        if(deviceid.equals("2015") && devicestatus.equals("11") ){
+          tcount2++;
+          Serial.print("Packets:");
+          Serial.println(tcount2);
+          display.clear();
+          display.setSegments(seg_empty);
+          if(tcount2>=3){
+            Serial.println("Tank Empty.........");
+            digitalWrite(buzzer, HIGH);
+            motor_status=1; 
+            tcount2=0;
+            sensor_status=1;
+          }
+        } else {
+          tcount2=0;
+        }
+
+        if(deviceid.equals("2015") && devicestatus.equals("22")){
+          tcount3++;
+          Serial.print("Packets:");
+          Serial.println(lora_pac_count);
+          display.clear();
+          if(tcount3>=2){
+            Serial.println("Tank No Data.........");
+            tcount3=0;
+            sensor_status=2;
+          }
+        } else {
+          tcount3=0;
+        }
+      }
+
+      Serial.print("RSSI :");         
+      Serial.println(LoRa.packetRssi());
+
+      lastPacketTime = millis();
+     
+    }
+
+    Serial.println("=========================================");
+    Serial.print("Motor Status:");
+    Serial.println(motor_status);
+    Serial.print("Motor Duration:");
+    Serial.println(motor_duration);
+    Serial.print("Motor Time:");
+    Serial.println(motor_time); 
+    Serial.print("Tank Status:");
+    Serial.println(sensor_status);
+
+    if(digitalRead(input1)==0){
+      Serial.println("Button Clicked...!");
+      if(digitalRead(buzzer)==0){
+        digitalWrite(buzzer,HIGH);
+        motor_status=1;
+        motor_time=motor_duration*60;
+        value_count=15;
+      } else { 
+        if(digitalRead(buzzer)==1){
+          digitalWrite(buzzer,LOW);
+          display.showNumberDec(0,false); 
+          Serial.println("Motor is now stopped..!");
+          motor_status=0;
+          value_count=0;
+        }
+      }
+    }
+
+    if(digitalRead(buzzer)==1){
+      motor_time=motor_time-1;
+      Serial.println("Motor Running..!");
+      display.showNumberDec(1, false, 1, 0);
+      display.showNumberDec((motor_time/60)+1,false);  
+      if(motor_time<=0 || sensor_status==0){
+        Serial.print("Sensor Count:");
+        Serial.println(sensor_status);
+        Serial.println("Tank Full or Timed Out..!");
+        temp_count1=temp_count1+1;
+        if(temp_count1>=5){
+          display.clear();
           digitalWrite(buzzer, LOW);
           motor_status=0;
+          temp_count1=0;
           display.showNumberDec(0,false); 
           motor_time=(motor_duration)*60;
-          tcount1=0;
-          sensor_status=0;
-        }
-      }
-      else{
-        tcount1=0;
-      }
-
-
-      if(deviceid.equals("2013") && devicestatus.equals("11") ){
-        tcount2++;
-        Serial.print("Packets:");
-        Serial.println(tcount2);
-        display.clear();
-        display.setSegments(seg_empty);
-        if(tcount2>=3){
-          Serial.println("Tank Empty.........");
-          digitalWrite(buzzer, HIGH);
-          motor_status=1; 
-          tcount2=0;
-          sensor_status=1;
-        }
-      }else{
-        tcount2=0;
-      }
-
-      if(deviceid.equals("2013") && devicestatus.equals("22")){
-        tcount3++;
-        Serial.print("Packets:");
-        Serial.println(lora_pac_count);
-        display.clear();
-        if(tcount3>=2){
-          Serial.println("Tank No Data.........");
-          tcount3=0;
-          sensor_status=2;
-        }
-      }else{
-        tcount3=0;
-      }
-
-    }
-    Serial.print("RSSI :");         // print RSSI of packet
-    Serial.println(LoRa.packetRssi());
-  }
-
-  Serial.println("=========================================");
-  Serial.print("Motor Status:");
-  Serial.println(motor_status);
-  Serial.print("Motor Duration:");
-  Serial.println(motor_duration);
-  Serial.print("Motor Time:");
-  Serial.println(motor_time); 
-  Serial.print("Tank Status:");
-  Serial.println(sensor_status);
-
-
-  if(digitalRead(input1)==0){
-    Serial.println("Button Clicked...!");
-    if(digitalRead(buzzer)==0){
-      digitalWrite(buzzer,HIGH);
-      motor_status=1;
-      motor_time=motor_duration*60;
-      value_count=15;
-    }else{ 
-      if(digitalRead(buzzer)==1){
-        digitalWrite(buzzer,LOW);
-        Serial.println("Motor is now stopped..!");
-        motor_status=0;
-        value_count=0;
-    }
-   }
-  }
-
-  if(digitalRead(buzzer)==1){
-   motor_time=motor_time-1;
-   Serial.println("Motor Running..!");
-   display.showNumberDec(1, false, 1, 0);
-   display.showNumberDec((motor_time/60)+1,false);  
-   if(motor_time<=0 || sensor_status==0){
-    Serial.print("Sensor Count:");
-    Serial.println(sensor_status);
-    Serial.println("Tank Full or Timed Out..!");
-    temp_count1=temp_count1+1;
-      if(temp_count1>=5){
-        display.clear();
-        digitalWrite(buzzer, LOW);
-        motor_status=0;
+        } 
+      } else {
         temp_count1=0;
-        display.showNumberDec(0,false); 
-        motor_time=(motor_duration)*60;
-      }else{
-      //ot_sensorcount=0;
-      } 
-   }else{
-    temp_count1=0;
-   }
-   delay(500);
-  }
-}
-  else
-  {
-    //  digitalWrite(buzzer, LOW);
-    //  display.setSegments(seg_ugempty);
+      }
+      delay(500);
+    }
+
+    if ((millis() - lastPacketTime > defaultTimeout) && sensor_status != 2) {
+      Serial.println("No LoRa signal for 15 seconds. Entering default mode.");
+    sensor_status = 2;
+    display.clear();
+    display.showNumberDec(0,false); 
+    digitalWrite(buzzer, LOW);
+    motor_status = 0;
+    motor_time = motor_duration * 60;
+    }
+
+  } else {
     if(ug_sensorstatus==0){
-        Serial.println(ug_sensorcount);
-        Serial.println("Under Ground Tank Empty");
-        
-        // display.setSegments(seg_ugempty);
-        if(ug_sensorcount>=20){
-           digitalWrite(buzzer, LOW);
-           delay(1000);
-           display.setSegments(seg_ugempty);
-           ug_sensorcount=0;
-
-        }
-        ug_sensorcount=ug_sensorcount+1; 
-         delay(500);
-        
-    }else{
+      Serial.println(ug_sensorcount);
+      Serial.println("Under Ground Tank Empty");
+      if(ug_sensorcount>=20){
+        digitalWrite(buzzer, LOW);
+        delay(1000);
+        display.setSegments(seg_ugempty);
         ug_sensorcount=0;
-        delay(500);
+      }
+      ug_sensorcount=ug_sensorcount+1; 
+      delay(500);
+    } else {
+      ug_sensorcount=0;
+      delay(500);
     }
+  }
 
-
-    }
   delay(500);
   count=count+1;
- }
+}

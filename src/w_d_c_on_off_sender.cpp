@@ -6,12 +6,12 @@
 #define ss 15
 #define rst 16
 #define dio0 2
-#define networkid "2002"
+#define networkid "2010"
 #define deviceid "01"
  
 int counter = 1;
 const int hsen = D1;
-const int lsen = D2;
+const int lsen = D8;
 const int spin = LED_BUILTIN;
 
 int value = 11;

@@ -4,274 +4,173 @@
 #include <LoRa.h>
 #include <SPI.h>
 
-// Display Module connection pins (Digital Pins)
 #define CLK D3
 #define DIO D4
 
 #define ss D8
 #define rst D0
-#define dio0 D4
+#define dio0 D4  
 
 int addr1 = 0;
-int addr2 = 1;
-int value1 = 1;
-int value2 = 2;
-byte memval1;
-byte memval2;
-int sensor_status=2;
+int motor_duration = 30;
+int motor_time = 0;
+int motor_status = 0;
+int motor_status_manual = 0;
 
 const int buzzer = D2;
 const int input1 = D9;
-int lora_pac_count=0;
-int tcount1=0;
-int tcount2=0;
-int tcount3=0;
 
-int motor_status=0;
-int motor_time=0;
-int empty_start=0;
-int value_count=0;
-int motor_duration=30;
-int motor_stoptime=0;
-int count=0;
-int sound=0;
-int temp_count1=0;
-
-const uint8_t seg_empty[] = {
-  0x00,         
-  SEG_A | SEG_D | SEG_E | SEG_F | SEG_G,         
-  SEG_A | SEG_D | SEG_E | SEG_F | SEG_G,         
-  0x00                                        
-};
-
-
+int lora_pac_count = 0;
+unsigned long lastLoRaReceiveTime = 0;
+const unsigned long loRaTimeout = 15000;  
 const uint8_t seg_full[] = {
-  0x00,                 // F
-  SEG_A | SEG_E | SEG_F | SEG_G,          // U
-  SEG_A | SEG_E | SEG_F | SEG_G,                          // L
-  0x00
+  SEG_A | SEG_G | SEG_F | SEG_E,
+  SEG_A | SEG_G | SEG_F | SEG_E,
+  SEG_D,
+  SEG_D
 };
 
+const uint8_t seg_nodata[] = {
+  SEG_A | SEG_E | SEG_F | SEG_G,         
+  SEG_A | SEG_B | SEG_E | SEG_F | SEG_G, 
+  SEG_D | SEG_E | SEG_F,                 
+  SEG_A | SEG_D | SEG_E | SEG_F | SEG_G  
+};
 
 TM1637Display display(CLK, DIO);
-  uint8_t data[] = { 0xff, 0xff, 0xff, 0xff };
-  uint8_t blank[] = { 0x00, 0x00, 0x00, 0x00 };
-  uint8_t data_full[]  = { 0x71, 0x3E, 0x38, 0x38 }; 
-  uint8_t data_empty[] = { 0x79, 0x76, 0x73, 0x78 };
 
 void setup() {
-  Serial.begin(115200); // Starts the serial communication
+  Serial.begin(115200);
   EEPROM.begin(512);
-  pinMode(input1, INPUT_PULLUP);  
+  pinMode(input1, INPUT_PULLUP);
   pinMode(buzzer, OUTPUT);
-  //pinMode(ot_sensor, INPUT_PULLUP);
-  //pinMode(ut_sensor, INPUT_PULLUP);
-  digitalWrite(buzzer, LOW);
-  motor_status=0;  
-  delay(1000);
-  memval1=EEPROM.read(addr1);
-  motor_duration=memval1;
+  digitalWrite(buzzer, HIGH);  
+
+  EEPROM.get(addr1, motor_duration);
+  if (motor_duration < 1 || motor_duration > 180) motor_duration = 30;
 
   display.setBrightness(0x0f);
-  display.setSegments(blank);
+  display.clear();
 
-  int temp_count=100;
-  if(digitalRead(input1)==0){
-    while(temp_count>=1){
-      if(digitalRead(input1)==0){
-        if(motor_duration<=180){
-          motor_duration=motor_duration+5;
-          temp_count=temp_count+1;
-        }else{
-          motor_duration=0;
-        } 
+  int temp_count = 100;
+  if (digitalRead(input1) == LOW) {
+    while (temp_count-- > 0) {
+      if (digitalRead(input1) == LOW) {
+        motor_duration = (motor_duration + 5) % 185;
+        if (motor_duration == 0) motor_duration = 5;
       }
-      temp_count=temp_count-1;
       delay(200);
-      Serial.print("Temp Count:");
-      Serial.println(temp_count);
-      Serial.print("Motor Duration:");
-      Serial.println(motor_duration);
-
-      EEPROM.write(addr1, motor_duration);
-      if (EEPROM.commit()) {
-      Serial.println("EEPROM successfully committed");
-      display.showNumberDec(5, false, 1, 0);
-      display.showNumberDec(motor_duration,false);
-      } else {
-      Serial.println("ERROR! EEPROM commit failed");
-      }      
+      EEPROM.put(addr1, motor_duration);
+      EEPROM.commit();
+      display.showNumberDec(motor_duration, false);
     }
-  }  
-
-  if(motor_duration<1 || motor_duration>180){
-    motor_duration=30;
   }
-   
-  motor_time=motor_duration*60;
-  empty_start=0;
 
-  const uint8_t seg_duration[] = {
-  SEG_A | SEG_B | SEG_E | SEG_F | SEG_G,           
-  SEG_D,   
-  SEG_D,                           
-  SEG_D           
-  };
+  motor_time = motor_duration * 60;
 
-  for(int i=0;i<8;i++){
-    display.showNumberDec(motor_duration,false);
+  for (int i = 0; i < 4; i++) {
+    display.showNumberDec(motor_duration, false);
     delay(200);
     display.clear();
     delay(200);
   }
-  display.showNumberDec(0,false);
 
-  LoRa.setPins(ss, rst, dio0);    //setup LoRa transceiver module
+  LoRa.setPins(ss, rst, dio0);
   LoRa.setSyncWord(0xA2);
   LoRa.setSpreadingFactor(12);
   LoRa.setSignalBandwidth(62.5E3);
-  //LoRa.begin(433E6)
-  int temp_count1=30;
 
-  while (!LoRa.begin(433920000))     //433E6 - Asia, 866E6 - Europe, 915E6 - North America
-  {
-    Serial.println(".");
-    temp_count1++;
-    if(temp_count1>=30){
-      break;
-    }
+  int attempts = 0;
+  while (!LoRa.begin(433920000)) {
+    Serial.println("Trying LoRa...");
     delay(500);
+    if (++attempts >= 30) break;
   }
 
+  lastLoRaReceiveTime = millis();
 }
 
 void loop() {
-  int packetSize = LoRa.parsePacket();    // try to parse packet
-  if (packetSize) 
-  {
-    Serial.print("Packet Size:");
-    Serial.println(packetSize);
-    Serial.print("Received packet '");
-    while (LoRa.available())              // read packet
-    {
-      String LoRaData = LoRa.readString();
-      Serial.println(LoRaData); 
-      String deviceid=LoRaData.substring(0,4);
-      String devicestatus=LoRaData.substring(6,8);
-      Serial.println(deviceid);
-      Serial.println(devicestatus);
-      if(deviceid.equals("2012") && devicestatus.equals("00")){
-        display.clear();
+  int packetSize = LoRa.parsePacket();
+  if (packetSize) {
+    String LoRaData = LoRa.readString();
+    Serial.print("Received: ");
+    Serial.println(LoRaData);
+
+    if (LoRaData == "2014") {
+      lora_pac_count++;
+      display.setSegments(seg_full);
+
+      if (lora_pac_count >= 3) { 
+        Serial.println("Tank Full. Stopping motor.");
+        digitalWrite(buzzer, LOW);
+        motor_status = 0;
+        motor_status_manual = 0;
+        motor_time = motor_duration * 60;
+        lora_pac_count = 0;
+
         display.setSegments(seg_full);
         delay(500);
-        tcount1++;
-        Serial.print("Packets:");
-        Serial.println(tcount1);
-        if(tcount1>=3 && digitalRead(buzzer)==1){
-          Serial.println("Tank Full.........");
-          digitalWrite(buzzer, LOW);
-          motor_status=0;
-          display.showNumberDec(0,false); 
-          motor_time=(motor_duration)*60;
-          tcount1=0;
-          sensor_status=0;
-        }
+        display.showNumberDec(0, false);
       }
-      else{
-        tcount1=0;
-      }
-
-
-      if(deviceid.equals("2012") && devicestatus.equals("11") ){
-        tcount2++;
-        Serial.print("Packets:");
-        Serial.println(tcount2);
-        display.clear();
-        display.setSegments(seg_empty);
-        if(tcount2>=3){
-          Serial.println("Tank Empty.........");
-          digitalWrite(buzzer, HIGH);
-          motor_status=1; 
-          tcount2=0;
-          sensor_status=1;
-        }
-      }else{
-        tcount2=0;
-      }
-
-      if(deviceid.equals("2012") && devicestatus.equals("22")){
-        tcount3++;
-        Serial.print("Packets:");
-        Serial.println(lora_pac_count);
-        display.clear();
-        if(tcount3>=2){
-          Serial.println("Tank No Data.........");
-          tcount3=0;
-          sensor_status=2;
-        }
-      }else{
-        tcount3=0;
-      }
-
     }
-    Serial.print("RSSI :");         // print RSSI of packet
+
+    lastLoRaReceiveTime = millis(); 
+    Serial.print("RSSI: ");
     Serial.println(LoRa.packetRssi());
   }
 
-  Serial.println("=========================================");
-  Serial.print("Motor Status:");
-  Serial.println(motor_status);
-  Serial.print("Motor Duration:");
-  Serial.println(motor_duration);
-  Serial.print("Motor Time:");
-  Serial.println(motor_time); 
-  Serial.print("Tank Status:");
-  Serial.println(sensor_status);
+  if (millis() - lastLoRaReceiveTime > loRaTimeout) {
+    Serial.println("LoRa Timeout. Switching to safe state.");
+    digitalWrite(buzzer, LOW);
+    motor_status = 0;
+    motor_status_manual = 0;
+    motor_time = motor_duration * 60;
+    display.setSegments(seg_nodata);
+  }
 
+  if (digitalRead(input1) == LOW) {
+    Serial.println("Manual button pressed.");
+    delay(200);  
 
-  if(digitalRead(input1)==0){
-    Serial.println("Button Clicked...!");
-    if(digitalRead(buzzer)==0){
-      digitalWrite(buzzer,HIGH);
-      motor_status=1;
-      motor_time=motor_duration*60;
-      value_count=15;
-    }else{ 
-      if(digitalRead(buzzer)==1){
-        digitalWrite(buzzer,LOW);
-        Serial.println("Motor is now stopped..!");
-        motor_status=0;
-        value_count=0;
+    if (motor_status_manual == 0) {
+      digitalWrite(buzzer, HIGH);
+      motor_status = 1;
+      motor_status_manual = 1;
+      motor_time = motor_duration * 60;
+    } else {
+      digitalWrite(buzzer, LOW);
+      motor_status = 0;
+      motor_status_manual = 0;
+      display.showNumberDec(0, false);
     }
-   }
   }
 
-  if(digitalRead(buzzer)==1){
-   motor_time=motor_time-1;
-   Serial.println("Motor Running..!");
-   display.showNumberDec(1, false, 1, 0);
-   display.showNumberDec((motor_time/60)+1,false);  
-   if(motor_time<=0 || sensor_status==0){
-    Serial.print("Sensor Count:");
-    Serial.println(sensor_status);
-    Serial.println("Tank Full or Timed Out..!");
-    temp_count1=temp_count1+1;
-      if(temp_count1>=5){
-        display.clear();
+  static unsigned long lastMotorUpdate = 0;
+  static int stopConfirmCount = 0;
+
+  if (motor_status == 1 && millis() - lastMotorUpdate >= 1000) {
+    motor_time--;
+    lastMotorUpdate = millis();
+
+    display.showNumberDec(1, false, 1, 0);  
+    display.showNumberDec((motor_time / 60) + 1, false);
+
+    if (motor_time <= 0) {
+      stopConfirmCount++;
+      if (stopConfirmCount >= 5) {
+        Serial.println("Motor stopped (timeout).");
         digitalWrite(buzzer, LOW);
-        motor_status=0;
-        temp_count1=0;
-        display.showNumberDec(0,false); 
-        motor_time=(motor_duration)*60;
-      }else{
-      //ot_sensorcount=0;
-      } 
-   }else{
-    temp_count1=0;
-   }
-   delay(500);
+        motor_status = 0;
+        motor_status_manual = 0;
+        motor_time = motor_duration * 60;
+        stopConfirmCount = 0;
+        display.showNumberDec(0, false);
+      }
+    } else {
+      stopConfirmCount = 0;
+    }
   }
 
-  delay(500);
-  count=count+1;
- }
+  delay(100);
+}

@@ -6,12 +6,12 @@
 #define rst 16
 #define dio0 2
 #define networkid "1023"
-#define deviceid "08"
+#define deviceid "02"
  
 int counter = 10;
-const int hsen = D2;
-const int lsen = D9;
-const int hpin = D1;
+const int hsen = D1;
+const int lsen = D8;
+const int hpin = D2;
 const int sled = LED_BUILTIN;
 int value = 11;
 int state=0;
@@ -61,7 +61,12 @@ void send_data(int rn){
     LoRa.print(vstate1);
     LoRa.print(vstate2);
     LoRa.endPacket(); 
+    Serial.print(networkid);
+    Serial.print(deviceid);
+    Serial.print(vstate1);
+    Serial.print(vstate2);
     Serial.print(".");
+    
     delay(100);
   }
   Serial.println("");
